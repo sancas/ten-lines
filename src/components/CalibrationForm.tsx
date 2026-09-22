@@ -40,6 +40,7 @@ import StaticEncounterSelector from "./StaticEncounterSelector";
 import { useSearchParams } from "react-router-dom";
 import WildEncounterSelector from "./WildEncounterSelector";
 import { fetchBingo, getBingoActive, useBingoBoard } from "./BingoPage";
+import useLocalStorage from "../hooks/useLocalStorage";
 
 export interface CalibrationFormState {
     seedLeewayString: string;
@@ -79,24 +80,35 @@ export interface CalibrationURLState {
 
 function useCalibrationURLState() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const game = searchParams.get("game") || "r_painting";
-    const sound = searchParams.get("sound") || "mono";
-    const buttonMode = searchParams.get("buttonMode") || "a";
-    const button = searchParams.get("button") || "a";
-    const heldButton = searchParams.get("heldButton") || "none";
-    const gameConsole = fixGameConsole(game, searchParams.get("gameConsole") || "GBA");
-    const advancesMin = searchParams.get("advancesMin") || "0";
-    const advancesMax = searchParams.get("advancesMax") || "100";
-    const ttvAdvancesMin = searchParams.get("ttvAdvancesMin") || "0";
-    const ttvAdvancesMax = searchParams.get("ttvAdvancesMax") || "100";
-    const offset = searchParams.get("offset") || "0";
-    const overworldFrames = gameConsole.startsWith("NX") ? searchParams.get("overworldFrames") || "600" : "0";
-    const trainerID = searchParams.get("trainerID") || "0";
-    const secretID = searchParams.get("secretID") || "0";
-    const teachyTVMode = !gameConsole.startsWith("NX") ? searchParams.get("teachyTVMode") || "false" : "false";
+    const [savedURLState, setSavedURLState] = useLocalStorage<Partial<CalibrationURLState>>(
+        "calibration-url-state",
+        {}
+    );
+
+    const game = searchParams.get("game") || savedURLState.game || "r_painting";
+    const sound = searchParams.get("sound") || savedURLState.sound || "mono";
+    const buttonMode = searchParams.get("buttonMode") || savedURLState.buttonMode || "a";
+    const button = searchParams.get("button") || savedURLState.button || "a";
+    const heldButton = searchParams.get("heldButton") || savedURLState.heldButton || "none";
+    const gameConsole = fixGameConsole(game, searchParams.get("gameConsole") || savedURLState.gameConsole || "GBA");
+    const advancesMin = searchParams.get("advancesMin") || savedURLState.advancesMin || "0";
+    const advancesMax = searchParams.get("advancesMax") || savedURLState.advancesMax || "100";
+    const ttvAdvancesMin = searchParams.get("ttvAdvancesMin") || savedURLState.ttvAdvancesMin || "0";
+    const ttvAdvancesMax = searchParams.get("ttvAdvancesMax") || savedURLState.ttvAdvancesMax || "100";
+    const offset = searchParams.get("offset") || savedURLState.offset || "0";
+    const overworldFrames = gameConsole.startsWith("NX")
+        ? searchParams.get("overworldFrames") || savedURLState.overworldFrames || "600"
+        : "0";
+    const trainerID = searchParams.get("trainerID") || savedURLState.trainerID || "0";
+    const secretID = searchParams.get("secretID") || savedURLState.secretID || "0";
+    const teachyTVMode = !gameConsole.startsWith("NX")
+        ? searchParams.get("teachyTVMode") || savedURLState.teachyTVMode || "false"
+        : "false";
     const targetSeedValue =
-        parseInt(searchParams.get("targetInitialSeed") || "DEAD", 16) ?? 0xdead;
+        parseInt(searchParams.get("targetInitialSeed") || savedURLState.targetInitialSeed || "DEAD", 16) ?? 0xdead;
+
     const setCalibrationURLState = (state: Partial<CalibrationURLState>) => {
+        setSavedURLState((prev) => ({ ...prev, ...state }));
         setSearchParams((prev) => {
             for (const [key, value] of Object.entries(state)) {
                 prev.set(key, value);
@@ -125,6 +137,30 @@ function useCalibrationURLState() {
     };
 }
 
+const defaultCalibrationFormState: CalibrationFormState = {
+    seedLeewayString: "20",
+    shininess: 255,
+    nature: -1,
+    gender: 255,
+    ivRangeStrings: [
+        ["0", "31"],
+        ["0", "31"],
+        ["0", "31"],
+        ["0", "31"],
+        ["0", "31"],
+        ["0", "31"],
+    ],
+    ivCalculatorText: "",
+    staticCategory: 0,
+    staticPokemon: 0,
+    wildCategory: 0,
+    wildLocation: 0,
+    wildPokemon: 0,
+    wildLead: 255,
+    shouldFilterPokemon: false,
+    method: 1,
+};
+
 export default function CalibrationForm({
     sx,
     hidden,
@@ -133,29 +169,10 @@ export default function CalibrationForm({
     hidden?: boolean;
 }) {
     const [calibrationFormState, setCalibrationFormState] =
-        useState<CalibrationFormState>({
-            seedLeewayString: "20",
-            shininess: 255,
-            nature: -1,
-            gender: 255,
-            ivRangeStrings: [
-                ["0", "31"],
-                ["0", "31"],
-                ["0", "31"],
-                ["0", "31"],
-                ["0", "31"],
-                ["0", "31"],
-            ],
-            ivCalculatorText: "",
-            staticCategory: 0,
-            staticPokemon: 0,
-            wildCategory: 0,
-            wildLocation: 0,
-            wildPokemon: 0,
-            wildLead: 255,
-            shouldFilterPokemon: false,
-            method: 1,
-        });
+        useLocalStorage<CalibrationFormState>(
+            "calibration-form-state",
+            defaultCalibrationFormState
+        );
     const {
         game,
         sound,
@@ -176,10 +193,13 @@ export default function CalibrationForm({
         setCalibrationURLState,
     } = useCalibrationURLState();
 
+    const [, setSearchParams] = useSearchParams();
     const [_bingoBoard, setBingoBoard, _bingoCounters, setBingoCounters] =
         useBingoBoard();
 
     const bingoActive = getBingoActive();
+    const [bingoLoading, setBingoLoading] = useState(false);
+    const [bingoSuccess, setBingoSuccess] = useState(false);
 
     const isStatic = calibrationFormState.method <= STATIC_4;
     const isFRLG = game.startsWith("fr") || game.startsWith("lg");
@@ -375,25 +395,22 @@ export default function CalibrationForm({
             `${hexSeed(option.initialSeed, 16)}`,
     });
 
-    if (calibrationFormState.staticCategory == 3 && !isFRLG) {
-        calibrationFormState.staticCategory = 0;
-        setCalibrationFormState(calibrationFormState);
-    }
-    if (calibrationFormState.staticCategory == 6 && !isFRLGE) {
-        calibrationFormState.staticCategory = 0;
-        setCalibrationFormState(calibrationFormState);
-    }
-    if (calibrationFormState.staticCategory == 8 && isFRLG) {
-        calibrationFormState.staticCategory = 0;
-        setCalibrationFormState(calibrationFormState);
-    }
+    useEffect(() => {
+        if (calibrationFormState.staticCategory === 3 && !isFRLG) {
+            setCalibrationFormState((prev) => ({ ...prev, staticCategory: 0 }));
+        } else if (calibrationFormState.staticCategory === 6 && !isFRLGE) {
+            setCalibrationFormState((prev) => ({ ...prev, staticCategory: 0 }));
+        } else if (calibrationFormState.staticCategory === 8 && isFRLG) {
+            setCalibrationFormState((prev) => ({ ...prev, staticCategory: 0 }));
+        }
+    }, [isFRLG, isFRLGE, calibrationFormState.staticCategory, setCalibrationFormState]);
 
     if (hidden) {
         return null;
     }
 
     return (
-        <Box component="form" onSubmit={handleSubmit} sx={{ sx }}>
+        <Box component="form" onSubmit={handleSubmit} sx={sx}>
             <TextField
                 label="Game"
                 margin="normal"
@@ -901,37 +918,88 @@ export default function CalibrationForm({
                 <span>IV Calculation disabled. Searching all Natures.</span>
             )}
             {bingoActive && (
-                <Button
-                    variant="contained"
-                    color="primary"
-                    type="button"
-                    onClick={() => {
-                        if (isNotSubmittable) return;
-                        const searchSeeds = seedList.slice(
-                            Math.max(0, targetSeedIndex - seedLeeway),
-                            Math.min(
-                                seedList.length,
-                                targetSeedIndex + seedLeeway + 1
-                            )
-                        );
-                        fetchBingo(
-                            searchSeeds,
-                            advancesRange,
-                            offset,
-                            isStatic,
-                            trainerID,
-                            secretID,
-                            game,
-                            calibrationFormState,
-                            setBingoBoard,
-                            setBingoCounters
-                        );
-                    }}
-                    fullWidth
-                    sx={{ my: 0.5 }}
-                >
-                    Bingo
-                </Button>
+                <>
+                    <Button
+                        variant="contained"
+                        color="secondary"
+                        type="button"
+                        disabled={isNotSubmittable || bingoLoading}
+                        onClick={async () => {
+                            if (isNotSubmittable) return;
+                            setBingoLoading(true);
+                            setBingoSuccess(false);
+                            try {
+                                const rawSeeds = seedList.slice(
+                                    Math.max(0, targetSeedIndex - seedLeeway),
+                                    Math.min(
+                                        seedList.length,
+                                        targetSeedIndex + seedLeeway + 1
+                                    )
+                                );
+                                const seenSeeds = new Set<number>();
+                                const searchSeeds: FRLGContiguousSeedEntry[] = [];
+                                for (const s of rawSeeds) {
+                                    if (!seenSeeds.has(s.initialSeed)) {
+                                        seenSeeds.add(s.initialSeed);
+                                        searchSeeds.push(s);
+                                    }
+                                }
+                                await fetchBingo(
+                                    searchSeeds,
+                                    advancesRange,
+                                    offset,
+                                    isStatic,
+                                    trainerID,
+                                    secretID,
+                                    game,
+                                    calibrationFormState,
+                                    setBingoBoard,
+                                    setBingoCounters
+                                );
+                                setBingoSuccess(true);
+                            } finally {
+                                setBingoLoading(false);
+                            }
+                        }}
+                        fullWidth
+                        sx={{ my: 0.5, fontWeight: 700 }}
+                    >
+                        {bingoLoading ? "Generando Tablero Bingo..." : "🎯 Generate Bingo Board"}
+                    </Button>
+                    {bingoSuccess && (
+                        <Box
+                            sx={{
+                                my: 1,
+                                p: 1.5,
+                                bgcolor: "rgba(16, 185, 129, 0.15)",
+                                border: "1px solid #10b981",
+                                borderRadius: 1.5,
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                flexWrap: "wrap",
+                                gap: 1,
+                            }}
+                        >
+                            <span style={{ fontSize: "0.9rem", color: "#34d399", fontWeight: 600 }}>
+                                ✅ ¡Tablero de Bingo generado con éxito!
+                            </span>
+                            <Button
+                                size="small"
+                                variant="contained"
+                                color="success"
+                                onClick={() => {
+                                    setSearchParams((prev) => {
+                                        prev.set("page", "3");
+                                        return prev;
+                                    });
+                                }}
+                            >
+                                Ver Tablero Bingo →
+                            </Button>
+                        </Box>
+                    )}
+                </>
             )}
             <Button
                 variant="contained"

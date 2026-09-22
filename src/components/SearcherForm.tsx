@@ -1,4 +1,3 @@
-import { useState } from "react";
 
 import { Box, Button, MenuItem, TextField } from "@mui/material";
 
@@ -23,9 +22,11 @@ import {
 } from "../tenLines/resources";
 import IvEntry from "./IvEntry";
 import StaticEncounterSelector from "./StaticEncounterSelector";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import WildEncounterSelector from "./WildEncounterSelector";
 import SearcherTable from "./SearcherTable";
+import useLocalStorage from "../hooks/useLocalStorage";
 
 export interface SearcherFormState {
     shininess: number;
@@ -50,10 +51,15 @@ export interface SearcherURLState {
 
 function useSearcherURLState() {
     const [searchParams, setSearchParams] = useSearchParams();
-    const game = searchParams.get("game") || "r_painting";
-    const trainerID = searchParams.get("trainerID") || "0";
-    const secretID = searchParams.get("secretID") || "0";
+    const [savedState, setSavedState] = useLocalStorage<Partial<SearcherURLState>>(
+        "searcher-url-state",
+        {}
+    );
+    const game = searchParams.get("game") || savedState.game || "r_painting";
+    const trainerID = searchParams.get("trainerID") || savedState.trainerID || "0";
+    const secretID = searchParams.get("secretID") || savedState.secretID || "0";
     const setSearcherURLState = (state: Partial<SearcherURLState>) => {
+        setSavedState((prev) => ({ ...prev, ...state }));
         setSearchParams((prev) => {
             for (const [key, value] of Object.entries(state)) {
                 prev.set(key, value);
@@ -69,6 +75,28 @@ function useSearcherURLState() {
     };
 }
 
+const defaultSearcherFormState: SearcherFormState = {
+    shininess: 255,
+    nature: -1,
+    gender: 255,
+    hiddenPower: -1,
+    ivRangeStrings: [
+        ["0", "31"],
+        ["0", "31"],
+        ["0", "31"],
+        ["0", "31"],
+        ["0", "31"],
+        ["0", "31"],
+    ],
+    staticCategory: 0,
+    staticPokemon: 0,
+    wildCategory: 0,
+    wildLocation: 0,
+    wildPokemon: 0,
+    wildLead: 255,
+    method: 1,
+};
+
 export default function CalibrationForm({
     sx,
     hidden,
@@ -77,27 +105,10 @@ export default function CalibrationForm({
     hidden?: boolean;
 }) {
     const [searcherFormState, setSearcherFormState] =
-        useState<SearcherFormState>({
-            shininess: 255,
-            nature: -1,
-            gender: 255,
-            hiddenPower: -1,
-            ivRangeStrings: [
-                ["0", "31"],
-                ["0", "31"],
-                ["0", "31"],
-                ["0", "31"],
-                ["0", "31"],
-                ["0", "31"],
-            ],
-            staticCategory: 0,
-            staticPokemon: 0,
-            wildCategory: 0,
-            wildLocation: 0,
-            wildPokemon: 0,
-            wildLead: 255,
-            method: 1,
-        });
+        useLocalStorage<SearcherFormState>(
+            "searcher-form-state",
+            defaultSearcherFormState
+        );
     const { game, trainerID, secretID, setSearcherURLState } =
         useSearcherURLState();
 
@@ -182,25 +193,22 @@ export default function CalibrationForm({
     const isFRLG = game.startsWith("fr") || game.startsWith("lg");
     const isFRLGE = isFRLG || game.startsWith("e_");
 
-    if (searcherFormState.staticCategory == 3 && !isFRLG) {
-        searcherFormState.staticCategory = 0;
-        setSearcherFormState(searcherFormState);
-    }
-    if (searcherFormState.staticCategory == 6 && !isFRLGE) {
-        searcherFormState.staticCategory = 0;
-        setSearcherFormState(searcherFormState);
-    }
-    if (searcherFormState.staticCategory == 8 && isFRLG) {
-        searcherFormState.staticCategory = 0;
-        setSearcherFormState(searcherFormState);
-    }
+    useEffect(() => {
+        if (searcherFormState.staticCategory === 3 && !isFRLG) {
+            setSearcherFormState((prev) => ({ ...prev, staticCategory: 0 }));
+        } else if (searcherFormState.staticCategory === 6 && !isFRLGE) {
+            setSearcherFormState((prev) => ({ ...prev, staticCategory: 0 }));
+        } else if (searcherFormState.staticCategory === 8 && isFRLG) {
+            setSearcherFormState((prev) => ({ ...prev, staticCategory: 0 }));
+        }
+    }, [isFRLG, isFRLGE, searcherFormState.staticCategory, setSearcherFormState]);
 
     if (hidden) {
         return null;
     }
 
     return (
-        <Box component="form" onSubmit={handleSubmit} sx={{ sx }}>
+        <Box component="form" onSubmit={handleSubmit} sx={sx}>
             <TextField
                 label="Game"
                 margin="normal"

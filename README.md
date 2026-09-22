@@ -10,9 +10,10 @@
 -   Searcher tab for finding targets
 -   Initial Seed tab for finding potential initial seeds for a particular target (both RSE painting and FRLG initial seed manip)
 -   Gen-3-Seed-Assistant-like calibration tab with builtin IV calculation.
+-   Built-in Bingo Mode for target tracking and verification
 -   Support for [blisy's e-reader events](https://www.youtube.com/watch?v=fgX36SAeTwQ)
 -   Progressive Web App for use offline
--   (Hopefully) mobile-friendly UI
+-   Mobile-friendly, responsive UI
 
 ## Contribution
 
@@ -22,7 +23,7 @@ Welcome!
 
 To build & run locally:
 
-1. [Install emsdk](https://emscripten.org/docs/getting_started/downloads.html)
+1. [Install emsdk](https://emscripten.org/docs/getting_started/downloads.html) and activate environment (e.g. `& <path-to-emsdk>/emsdk_env.ps1` in PowerShell or `source ./emsdk_env.sh` in Bash)
 1. Clone the repository: `git clone --recursive https://github.com/lincoln-lm/ten-lines.git`
 1. Enter project directory: `cd ten-lines`
 1. Install python dependencies `pip install -r src/wasm/requirements.txt`

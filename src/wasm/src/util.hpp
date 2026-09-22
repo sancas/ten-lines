@@ -39,14 +39,15 @@ public:
 
         auto ctor = &dummy_ctor<ClassType>;
         auto dtor = &raw_destructor<ClassType>;
-
         _embind_register_value_object(
             TypeID<ClassType>::get(),
             name,
             getSignature(ctor),
             reinterpret_cast<GenericFunction>(ctor),
             getSignature(dtor),
-            reinterpret_cast<GenericFunction>(dtor));
+            reinterpret_cast<GenericFunction>(dtor),
+            sizeof(ClassType),
+            is_trivial_value_type<ClassType>::value);
     }
 
     ~value_immutable_unconstructable()
@@ -176,9 +177,11 @@ class callback<ReturnType(Args...)> : public val {
 public:
     ReturnType operator()(Args... args)
     {
-        using namespace internal;
-
-        return internalCall<EM_INVOKER_KIND::FUNCTION, WithPolicies<>, val>(as_handle(), nullptr, sanitizeValue(std::forward<Args>(args))...).template as<ReturnType>();
+        if constexpr (std::is_void_v<ReturnType>) {
+            val::operator()(sanitizeValue(std::forward<Args>(args))...);
+        } else {
+            return val::operator()(sanitizeValue(std::forward<Args>(args))...).template as<ReturnType>();
+        }
     }
 };
 
