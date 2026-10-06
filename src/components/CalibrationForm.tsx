@@ -5,7 +5,6 @@ import {
     Box,
     Button,
     Checkbox,
-    createFilterOptions,
     Dialog,
     DialogContent,
     FormControlLabel,
@@ -16,7 +15,6 @@ import {
 import fetchTenLines, {
     COMBINED_WILD_METHOD,
     fetchSeedData,
-    fixGameConsole,
     frameToMS,
     hexSeed,
     SEED_IDENTIFIER_TO_GAME,
@@ -39,8 +37,10 @@ import IvCalculator from "./IvCalculator";
 import StaticEncounterSelector from "./StaticEncounterSelector";
 import { useSearchParams } from "react-router-dom";
 import WildEncounterSelector from "./WildEncounterSelector";
-import { fetchBingo, getBingoActive, useBingoBoard } from "./BingoPage";
+import { fetchBingo, getBingoActive, useBingoBoard, useBingoMetadata } from "./BingoPage";
 import useLocalStorage from "../hooks/useLocalStorage";
+import useGameSettings from "../hooks/useGameSettings";
+import GameConsoleSelector from "./GameConsoleSelector";
 
 export interface CalibrationFormState {
     seedLeewayString: string;
@@ -60,12 +60,10 @@ export interface CalibrationFormState {
 }
 
 export interface CalibrationURLState {
-    game: string;
     sound: string;
     buttonMode: string;
     button: string;
     heldButton: string;
-    gameConsole: string;
     targetInitialSeed: string;
     advancesMin: string;
     advancesMax: string;
@@ -73,24 +71,20 @@ export interface CalibrationURLState {
     ttvAdvancesMax: string;
     offset: string;
     overworldFrames: string;
-    trainerID: string;
-    secretID: string;
     teachyTVMode: string;
 }
 
-function useCalibrationURLState() {
+function useCalibrationURLState(gameConsole: string) {
     const [searchParams, setSearchParams] = useSearchParams();
     const [savedURLState, setSavedURLState] = useLocalStorage<Partial<CalibrationURLState>>(
         "calibration-url-state",
         {}
     );
 
-    const game = searchParams.get("game") || savedURLState.game || "r_painting";
     const sound = searchParams.get("sound") || savedURLState.sound || "mono";
     const buttonMode = searchParams.get("buttonMode") || savedURLState.buttonMode || "a";
     const button = searchParams.get("button") || savedURLState.button || "a";
     const heldButton = searchParams.get("heldButton") || savedURLState.heldButton || "none";
-    const gameConsole = fixGameConsole(game, searchParams.get("gameConsole") || savedURLState.gameConsole || "GBA");
     const advancesMin = searchParams.get("advancesMin") || savedURLState.advancesMin || "0";
     const advancesMax = searchParams.get("advancesMax") || savedURLState.advancesMax || "100";
     const ttvAdvancesMin = searchParams.get("ttvAdvancesMin") || savedURLState.ttvAdvancesMin || "0";
@@ -99,8 +93,6 @@ function useCalibrationURLState() {
     const overworldFrames = gameConsole.startsWith("NX")
         ? searchParams.get("overworldFrames") || savedURLState.overworldFrames || "600"
         : "0";
-    const trainerID = searchParams.get("trainerID") || savedURLState.trainerID || "0";
-    const secretID = searchParams.get("secretID") || savedURLState.secretID || "0";
     const teachyTVMode = !gameConsole.startsWith("NX")
         ? searchParams.get("teachyTVMode") || savedURLState.teachyTVMode || "false"
         : "false";
@@ -117,12 +109,10 @@ function useCalibrationURLState() {
         });
     };
     return {
-        game,
         sound,
         buttonMode,
         button,
         heldButton,
-        gameConsole,
         targetSeedValue,
         advancesMin,
         advancesMax,
@@ -130,8 +120,6 @@ function useCalibrationURLState() {
         ttvAdvancesMax,
         offset,
         overworldFrames,
-        trainerID,
-        secretID,
         teachyTVMode,
         setCalibrationURLState,
     };
@@ -173,13 +161,28 @@ export default function CalibrationForm({
             "calibration-form-state",
             defaultCalibrationFormState
         );
+
     const {
         game,
+        gameConsole,
+        trainerID,
+        secretID,
+        isSwitch,
+        isFRLG,
+        isFRLGE,
+        setGame,
+        setGameConsole,
+        setTrainerID,
+        setSecretID,
+    } = useGameSettings();
+
+    const [, setBingoMetadata] = useBingoMetadata();
+
+    const {
         sound,
         buttonMode,
         button,
         heldButton,
-        gameConsole,
         targetSeedValue,
         advancesMin,
         advancesMax,
@@ -187,11 +190,9 @@ export default function CalibrationForm({
         ttvAdvancesMax,
         offset,
         overworldFrames,
-        trainerID,
-        secretID,
         teachyTVMode,
         setCalibrationURLState,
-    } = useCalibrationURLState();
+    } = useCalibrationURLState(gameConsole);
 
     const [, setSearchParams] = useSearchParams();
     const [_bingoBoard, setBingoBoard, _bingoCounters, setBingoCounters] =
@@ -202,9 +203,6 @@ export default function CalibrationForm({
     const [bingoSuccess, setBingoSuccess] = useState(false);
 
     const isStatic = calibrationFormState.method <= STATIC_4;
-    const isFRLG = game.startsWith("fr") || game.startsWith("lg");
-    const isFRLGE = isFRLG || game.startsWith("e_");
-    const isSwitch = game.endsWith("nx");
 
     const [rows, setRows] = useState<
         ExtendedGeneratorState[] | ExtendedWildGeneratorState[]
@@ -276,34 +274,39 @@ export default function CalibrationForm({
                 );
                 return;
             }
-            const seedData = await fetchSeedData(game);
-            const tenLines = await fetchTenLines();
-            const seedList = await tenLines.get_contiguous_seed_list(
-                seedData,
-                `${sound}_${buttonMode}_${button}`,
-                game,
-                heldButton
-            );
-            setSeedList(seedList);
-            if (
-                seedList.findIndex(
-                    (seed: FRLGContiguousSeedEntry) =>
-                        seed.initialSeed === targetSeedValue
-                ) == -1
-            ) {
-                setCalibrationURLState({
-                    targetInitialSeed: hexSeed(
-                        seedList.length > 0
-                            ? seedList[Math.min(51, seedList.length - 1)]
-                                .initialSeed
-                            : 0xdead,
-                        16
-                    ),
-                });
+            try {
+                const seedData = await fetchSeedData(game);
+                const tenLines = await fetchTenLines();
+                const seedList = await tenLines.get_contiguous_seed_list(
+                    seedData,
+                    `${sound}_${buttonMode}_${button}`,
+                    game,
+                    heldButton
+                );
+                setSeedList(seedList);
+                if (
+                    seedList.findIndex(
+                        (seed: FRLGContiguousSeedEntry) =>
+                            seed.initialSeed === targetSeedValue
+                    ) === -1
+                ) {
+                    setCalibrationURLState({
+                        targetInitialSeed: hexSeed(
+                            seedList.length > 0
+                                ? seedList[Math.min(51, seedList.length - 1)]
+                                    .initialSeed
+                                : 0xdead,
+                            16
+                        ),
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to fetch seeds for", game, err);
+                setSeedList([]);
             }
         };
         fetchSeedList();
-    }, [game, sound, buttonMode, button, heldButton]);
+    }, [game, sound, buttonMode, button, heldButton, isFRLG]);
 
     const targetSeedIndex = useMemo(
         () =>
@@ -388,12 +391,90 @@ export default function CalibrationForm({
         submit();
     };
 
-    const targetSeedFilterOptions = createFilterOptions({
-        limit: 100,
-        // don't match based on ms
-        stringify: (option: FRLGContiguousSeedEntry) =>
-            `${hexSeed(option.initialSeed, 16)}`,
-    });
+    const targetSeedFilterOptions = useMemo(() => {
+        return (
+            options: FRLGContiguousSeedEntry[],
+            state: {
+                inputValue: string;
+                getOptionLabel: (opt: FRLGContiguousSeedEntry) => string;
+            }
+        ): FRLGContiguousSeedEntry[] => {
+            if (options.length === 0) return [];
+
+            const leeway =
+                seedLeewayIsValid && seedLeeway > 0 ? seedLeeway : 20;
+
+            const currentLabel =
+                targetSeed && targetSeed.initialSeed !== 0xdead
+                    ? `${hexSeed(targetSeed.initialSeed, 16)} (${frameToMS(
+                          targetSeed.seedTime / 16,
+                          gameConsole
+                      )}ms)`
+                    : "";
+
+            const rawInput = state.inputValue.trim();
+
+            if (
+                !rawInput ||
+                (currentLabel &&
+                    rawInput.toLowerCase() === currentLabel.toLowerCase())
+            ) {
+                const centerIndex =
+                    targetSeedIndex !== -1 ? targetSeedIndex : 0;
+                const start = Math.max(0, centerIndex - leeway);
+                const end = Math.min(
+                    options.length,
+                    centerIndex + leeway + 1
+                );
+                return options.slice(start, end);
+            }
+
+            const cleanInput = rawInput
+                .toLowerCase()
+                .replace(/\s*ms$/i, "")
+                .replace(/^0x/i, "");
+
+            const isNumeric = /^\d+$/.test(cleanInput);
+            const numericVal = isNumeric ? parseInt(cleanInput, 10) : NaN;
+
+            const isMsSearch =
+                (/ms$/i.test(rawInput) && isNumeric) ||
+                (isNumeric && numericVal >= 10000);
+
+            if (isMsSearch) {
+                let closestIndex = 0;
+                let minDiff = Infinity;
+                for (let i = 0; i < options.length; i++) {
+                    const ms = frameToMS(
+                        options[i].seedTime / 16,
+                        gameConsole
+                    );
+                    const diff = Math.abs(ms - numericVal);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIndex = i;
+                    }
+                }
+                const start = Math.max(0, closestIndex - leeway);
+                const end = Math.min(
+                    options.length,
+                    closestIndex + leeway + 1
+                );
+                return options.slice(start, end);
+            }
+
+            const matches: FRLGContiguousSeedEntry[] = [];
+            for (const opt of options) {
+                const hex = hexSeed(opt.initialSeed, 16).toLowerCase();
+                const ms = frameToMS(opt.seedTime / 16, gameConsole).toString();
+                if (hex.includes(cleanInput) || ms.includes(cleanInput)) {
+                    matches.push(opt);
+                    if (matches.length >= 100) break;
+                }
+            }
+            return matches;
+        };
+    }, [seedLeewayIsValid, seedLeeway, targetSeed, gameConsole, targetSeedIndex]);
 
     useEffect(() => {
         if (calibrationFormState.staticCategory === 3 && !isFRLG) {
@@ -411,36 +492,16 @@ export default function CalibrationForm({
 
     return (
         <Box component="form" onSubmit={handleSubmit} sx={sx}>
-            <TextField
-                label="Game"
-                margin="normal"
-                style={{ textAlign: "left" }}
-                onChange={(event) =>
-                    setCalibrationURLState({
-                        game: event.target.value,
-                    })
-                }
-                value={game}
-                select
-                fullWidth
-            >
-                <MenuItem value="r_painting">Ruby Painting Seed</MenuItem>
-                <MenuItem value="s_painting">Sapphire Painting Seed</MenuItem>
-                <MenuItem value="e_painting">Emerald Painting Seed</MenuItem>
-                <MenuItem value="fr">FireRed (ENG)</MenuItem>
-                <MenuItem value="fr_eu">FireRed (SPA/FRE/ITA/GER)</MenuItem>
-                <MenuItem value="fr_jpn_1_0">FireRed (JPN) (1.0)</MenuItem>
-                <MenuItem value="fr_jpn_1_1">FireRed (JPN) (1.1)</MenuItem>
-                <MenuItem value="fr_nx">Switch FireRed (ENG/SPA/FRE/ITA/GER)</MenuItem>
-                <MenuItem value="fr_jpn_nx">Switch FireRed (JPN)</MenuItem>
-                <MenuItem value="fr_mgba">FireRed (ENG) (MGBA 10.5)</MenuItem>
-                <MenuItem value="lg">LeafGreen (ENG)</MenuItem>
-                <MenuItem value="lg_eu">LeafGreen (SPA/FRE/ITA/GER)</MenuItem>
-                <MenuItem value="lg_jpn">LeafGreen (JPN)</MenuItem>
-                <MenuItem value="lg_nx">Switch LeafGreen (ENG/SPA/FRE/ITA/GER)</MenuItem>
-                <MenuItem value="lg_jpn_nx">Switch LeafGreen (JPN)</MenuItem>
-                <MenuItem value="lg_mgba">LeafGreen (ENG) (MGBA 10.5)</MenuItem>
-            </TextField>
+            <GameConsoleSelector
+                game={game}
+                gameConsole={gameConsole}
+                onGameChange={(newGame) => {
+                    setGame(newGame);
+                }}
+                onConsoleChange={(newConsole) => {
+                    setGameConsole(newConsole);
+                }}
+            />
             {isFRLG && (
                 <React.Fragment>
                     <TextField
@@ -518,40 +579,19 @@ export default function CalibrationForm({
                     </TextField>
                 </React.Fragment>
             )}
-
-            <TextField
-                label="Console"
-                margin="normal"
-                style={{ textAlign: "left" }}
-                onChange={(event) =>
-                    setCalibrationURLState({
-                        gameConsole: event.target.value,
-                    })
-                }
-                value={gameConsole}
-                select
-                fullWidth
-            >
-                {isSwitch ? [
-                    <MenuItem value="NX">Nintendo Switch 1</MenuItem>,
-                    <MenuItem value="NX2">Nintendo Switch 2</MenuItem>
-                ]
-                    :
-                    [
-                        <MenuItem value="GBA">Game Boy Advance</MenuItem>,
-                        <MenuItem value="GBP">Game Boy Player</MenuItem>,
-                        <MenuItem value="NDS">Nintendo DS</MenuItem>,
-                        <MenuItem value="3DS">Nintendo 3DS (open_agb_firm)</MenuItem>,
-                    ]
-                }</TextField>
             <Autocomplete
                 options={seedList}
                 value={targetSeed}
                 onChange={(_event, newValue) => {
-                    setCalibrationURLState({
-                        targetInitialSeed: hexSeed(newValue.initialSeed, 16),
-                    });
+                    if (newValue) {
+                        setCalibrationURLState({
+                            targetInitialSeed: hexSeed(newValue.initialSeed, 16),
+                        });
+                    }
                 }}
+                isOptionEqualToValue={(option, value) =>
+                    option.initialSeed === value?.initialSeed
+                }
                 getOptionLabel={(item_) => {
                     const item = item_ as FRLGContiguousSeedEntry;
                     return `${hexSeed(item.initialSeed, 16)} (${frameToMS(
@@ -707,7 +747,7 @@ export default function CalibrationForm({
                     label="Trainer ID"
                     margin="normal"
                     onChange={(_event, value) => {
-                        setCalibrationURLState({ trainerID: value.value });
+                        setTrainerID(value.value);
                         setTrainerIDIsValid(value.isValid);
                     }}
                     value={trainerID}
@@ -728,7 +768,7 @@ export default function CalibrationForm({
                     label="Secret ID"
                     margin="normal"
                     onChange={(_event, value) => {
-                        setCalibrationURLState({ secretID: value.value });
+                        setSecretID(value.value);
                         setSecretIDIsValid(value.isValid);
                     }}
                     value={secretID}
@@ -956,6 +996,11 @@ export default function CalibrationForm({
                                     setBingoBoard,
                                     setBingoCounters
                                 );
+                                setBingoMetadata({
+                                    game,
+                                    gameConsole,
+                                    createdAt: Date.now(),
+                                });
                                 setBingoSuccess(true);
                             } finally {
                                 setBingoLoading(false);

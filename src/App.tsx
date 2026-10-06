@@ -70,11 +70,15 @@ function TenLinesPages() {
     const currentPage = parseInt(searchParams.get("page") || "0") ?? 0;
     const bingoActive = getBingoActive();
 
+    const isBingoPage = currentPage === 3;
+
     const formSx = {
-        maxWidth: 1100,
+        maxWidth: isBingoPage
+            ? { xs: "100%", sm: "99%", md: "98%", xl: "96%" }
+            : { xs: "100%", sm: 960, md: 1240, lg: 1540, xl: 1960 },
         width: "100%",
         mx: "auto",
-        px: { xs: 0.5, sm: 2 },
+        px: { xs: 0.5, sm: 1.5, md: 2 },
     };
 
     const pages = [
@@ -105,7 +109,16 @@ function TenLinesPages() {
     return (
         <ThemeProvider theme={darkTheme}>
             <CssBaseline />
-            <Box sx={{ width: "100%", maxWidth: 1200, mx: "auto" }}>
+            <Box
+                sx={{
+                    width: "100%",
+                    maxWidth: isBingoPage
+                        ? { xs: "100%", sm: "99%", md: "98%", xl: "96%" }
+                        : { xs: "100%", sm: 980, md: 1280, lg: 1580, xl: 2000 },
+                    mx: "auto",
+                    transition: "max-width 0.25s ease-in-out",
+                }}
+            >
                 {/* Header Branded */}
                 <Box
                     sx={{

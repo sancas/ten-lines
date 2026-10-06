@@ -27,10 +27,14 @@ const SearcherTable = memo(function SearcherTable({
     rows,
     isStatic,
     isMultiMethod,
+    game,
+    gameConsole,
 }: {
     rows: ExtendedSearcherState[] | ExtendedWildSearcherState[];
     isStatic: boolean;
     isMultiMethod: boolean;
+    game: string;
+    gameConsole: string;
 }) {
     const [_, setSearchParams] = useSearchParams();
 
@@ -41,6 +45,8 @@ const SearcherTable = memo(function SearcherTable({
         setSearchParams((previous) => {
             let params = new URLSearchParams(previous);
             params.set("targetSeed", hexSeed(row.seed, 32));
+            params.set("game", game);
+            params.set("gameConsole", gameConsole);
             params.set("page", "0");
             if (isAuxClick) {
                 window.open(`?${params.toString()}`);

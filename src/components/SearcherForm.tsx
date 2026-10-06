@@ -23,10 +23,12 @@ import {
 import IvEntry from "./IvEntry";
 import StaticEncounterSelector from "./StaticEncounterSelector";
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import WildEncounterSelector from "./WildEncounterSelector";
 import SearcherTable from "./SearcherTable";
 import useLocalStorage from "../hooks/useLocalStorage";
+
+import useGameSettings from "../hooks/useGameSettings";
+import GameConsoleSelector from "./GameConsoleSelector";
 
 export interface SearcherFormState {
     shininess: number;
@@ -41,38 +43,6 @@ export interface SearcherFormState {
     wildPokemon: number;
     wildLead: number;
     method: number;
-}
-
-export interface SearcherURLState {
-    game: string;
-    trainerID: string;
-    secretID: string;
-}
-
-function useSearcherURLState() {
-    const [searchParams, setSearchParams] = useSearchParams();
-    const [savedState, setSavedState] = useLocalStorage<Partial<SearcherURLState>>(
-        "searcher-url-state",
-        {}
-    );
-    const game = searchParams.get("game") || savedState.game || "r_painting";
-    const trainerID = searchParams.get("trainerID") || savedState.trainerID || "0";
-    const secretID = searchParams.get("secretID") || savedState.secretID || "0";
-    const setSearcherURLState = (state: Partial<SearcherURLState>) => {
-        setSavedState((prev) => ({ ...prev, ...state }));
-        setSearchParams((prev) => {
-            for (const [key, value] of Object.entries(state)) {
-                prev.set(key, value);
-            }
-            return prev;
-        });
-    };
-    return {
-        game,
-        trainerID,
-        secretID,
-        setSearcherURLState,
-    };
 }
 
 const defaultSearcherFormState: SearcherFormState = {
@@ -97,7 +67,7 @@ const defaultSearcherFormState: SearcherFormState = {
     method: 1,
 };
 
-export default function CalibrationForm({
+export default function SearcherForm({
     sx,
     hidden,
 }: {
@@ -109,8 +79,18 @@ export default function CalibrationForm({
             "searcher-form-state",
             defaultSearcherFormState
         );
-    const { game, trainerID, secretID, setSearcherURLState } =
-        useSearcherURLState();
+    const {
+        game,
+        gameConsole,
+        trainerID,
+        secretID,
+        isFRLG,
+        isFRLGE,
+        setGame,
+        setGameConsole,
+        setTrainerID,
+        setSecretID,
+    } = useGameSettings();
 
     const [rows, setRows] = useState<ExtendedSearcherState[]>([]);
     const [searching, setSearching] = useState(false);
@@ -190,8 +170,6 @@ export default function CalibrationForm({
     };
 
     const isStatic = searcherFormState.method <= STATIC_4;
-    const isFRLG = game.startsWith("fr") || game.startsWith("lg");
-    const isFRLGE = isFRLG || game.startsWith("e_");
 
     useEffect(() => {
         if (searcherFormState.staticCategory === 3 && !isFRLG) {
@@ -209,42 +187,23 @@ export default function CalibrationForm({
 
     return (
         <Box component="form" onSubmit={handleSubmit} sx={sx}>
-            <TextField
-                label="Game"
-                margin="normal"
-                style={{ textAlign: "left" }}
-                onChange={(event) =>
-                    setSearcherURLState({
-                        game: event.target.value,
-                    })
-                }
-                value={game}
-                select
-                fullWidth
-            >
-                <MenuItem value="r_painting">Ruby Painting Seed</MenuItem>
-                <MenuItem value="s_painting">Sapphire Painting Seed</MenuItem>
-                <MenuItem value="e_painting">Emerald Painting Seed</MenuItem>
-                <MenuItem value="fr">FireRed (ENG)</MenuItem>
-                <MenuItem value="fr_eu">FireRed (SPA/FRE/ITA/GER)</MenuItem>
-                <MenuItem value="fr_jpn_1_0">FireRed (JPN) (1.0)</MenuItem>
-                <MenuItem value="fr_jpn_1_1">FireRed (JPN) (1.1)</MenuItem>
-                <MenuItem value="fr_nx">Switch FireRed (ENG/SPA/FRE/ITA/GER)</MenuItem>
-                <MenuItem value="fr_jpn_nx">Switch FireRed (JPN)</MenuItem>
-                <MenuItem value="fr_mgba">FireRed (ENG) (MGBA 10.5)</MenuItem>
-                <MenuItem value="lg">LeafGreen (ENG)</MenuItem>
-                <MenuItem value="lg_eu">LeafGreen (SPA/FRE/ITA/GER)</MenuItem>
-                <MenuItem value="lg_jpn">LeafGreen (JPN)</MenuItem>
-                <MenuItem value="lg_nx">Switch LeafGreen (ENG/SPA/FRE/ITA/GER)</MenuItem>
-                <MenuItem value="lg_jpn_nx">Switch LeafGreen (JPN)</MenuItem>
-                <MenuItem value="lg_mgba">LeafGreen (ENG) (MGBA 10.5)</MenuItem>
-            </TextField>
+            <GameConsoleSelector
+                game={game}
+                gameConsole={gameConsole}
+                onGameChange={(newGame) => {
+                    setGame(newGame);
+                    setRows([]);
+                }}
+                onConsoleChange={(newConsole) => {
+                    setGameConsole(newConsole);
+                }}
+            />
             <Box sx={{ flexDirection: "row", display: "flex" }}>
                 <NumericalInput
                     label="Trainer ID"
                     margin="normal"
                     onChange={(_event, value) => {
-                        setSearcherURLState({ trainerID: value.value });
+                        setTrainerID(value.value);
                         setTrainerIDIsValid(value.isValid);
                     }}
                     value={trainerID}
@@ -265,7 +224,7 @@ export default function CalibrationForm({
                     label="Secret ID"
                     margin="normal"
                     onChange={(_event, value) => {
-                        setSearcherURLState({ secretID: value.value });
+                        setSecretID(value.value);
                         setSecretIDIsValid(value.isValid);
                     }}
                     value={secretID}
@@ -445,6 +404,8 @@ export default function CalibrationForm({
                 isMultiMethod={
                     searcherFormState.method === COMBINED_WILD_METHOD
                 }
+                game={game}
+                gameConsole={gameConsole}
             />
         </Box>
     );

@@ -17,12 +17,14 @@ dayjs.extend(duration);
 
 const InitialSeedTable = memo(function InitialSeedTable({
     rows,
+    game,
     isFRLG,
     gameConsole,
     isTeachyTVMode,
     teachyTVRegularOut,
 }: {
     rows: InitialSeedResult[];
+    game: string;
     isFRLG: boolean;
     gameConsole: string;
     isTeachyTVMode: boolean;
@@ -64,6 +66,8 @@ const InitialSeedTable = memo(function InitialSeedTable({
         setSearchParams((previous) => {
             let params = new URLSearchParams(previous);
             params.set("targetInitialSeed", hexSeed(row.initialSeed, 16));
+            params.set("game", game);
+            params.set("gameConsole", gameConsole);
             if (isTeachyTVMode) {
                 const ttv = teachyTVConversion(
                     row.advances,
